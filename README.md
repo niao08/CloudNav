@@ -51,11 +51,11 @@
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
 2. 导航至 **Workers & Pages** -> **Overview**。
 3. 点击 **Create application** -> **Pages** -> **Connect to Git**。
-4. 选择刚才 Fork 的仓库 `mao_nav`。
+4. 选择刚才 Fork 的仓库 `CloudNav-`。
 5. **配置构建参数 (关键)**:
-    *   **Project name**: 随意填写 (如 `my-nav`)。
+    *   **Project name**: 随意填写 (如 `CloudNav-`)。
     *   **Production branch**: `main` (或 `master`)。
-    *   **Framework preset**: **None (不选 / 空)** <small>*(注意：不要选 React 或 Create React App)*</small>。
+    *   **Framework preset**: **None (不选 / 空)**。
     *   **Build command**: `npm run build`。
     *   **Build output directory**: `dist`。
 6. 点击 **Save and Deploy**。
@@ -105,7 +105,7 @@
 ### 3. WebDAV 备份
 点击侧边栏的 **“备份”** 图标，配置 WebDAV 信息 (如坚果云)，即可一键上传备份到云端。
 
-### 4. 本地数据导出
+### 4. 本地数据导出 (Local Data Export)
 点击侧边栏的 **“备份”** 图标 -> **“导出 HTML”**。
 *   生成的 HTML 文件完全兼容 **Chrome**、**Edge**、**Firefox** 等主流浏览器的导入格式。
 *   完整保留您在云航中整理的分类目录结构。
