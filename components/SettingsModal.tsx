@@ -15,34 +15,31 @@ interface SettingsModalProps {
   onUpdateLinks: (links: LinkItem[]) => void;
 }
 
-// 辅助函数：生成 SVG Data URI 图标
-const generateSvgIcon = (text: string, style: 'blue' | 'purple' | 'orange' | 'dark' | 'green') => {
+// 辅助函数：生成随机 HSL 颜色
+const getRandomColor = () => {
+    const h = Math.floor(Math.random() * 360);
+    const s = 70 + Math.random() * 20; // 70-90% saturation
+    const l = 45 + Math.random() * 15; // 45-60% lightness
+    return `hsl(${h}, ${s}%, ${l}%)`;
+};
+
+// 辅助函数：生成 SVG Data URI 图标 (支持自定义颜色)
+const generateSvgIcon = (text: string, color1: string, color2: string) => {
     const char = (text && text.length > 0 ? text.charAt(0) : 'C').toUpperCase();
-    let bg = '';
-    let fg = 'white';
     
-    switch(style) {
-        case 'blue': 
-            bg = '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#2563eb"/></linearGradient>'; 
-            break;
-        case 'purple': 
-            bg = '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient>'; 
-            break;
-        case 'orange': 
-            bg = '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#d97706"/></linearGradient>'; 
-            break;
-        case 'green':
-            bg = '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#059669"/></linearGradient>';
-            break;
-        case 'dark': 
-            bg = '<rect width="100%" height="100%" fill="#1e293b"/>'; 
-            break;
-    }
+    // 生成渐变 ID，防止多个 SVG 在同一页面导致 ID 冲突虽然这里是 base64 但是个好习惯
+    const gradientId = 'g_' + Math.random().toString(36).substr(2, 9);
 
     const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-        ${bg.includes('gradient') ? '<defs>' + bg + '</defs><rect width="100%" height="100%" fill="url(#g)" rx="16"/>' : bg.replace('rect', 'rect rx="16"')}
-        <text x="50%" y="50%" dy=".35em" fill="${fg}" font-family="Arial, sans-serif" font-weight="bold" font-size="32" text-anchor="middle">${char}</text>
+        <defs>
+            <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="${color1}"/>
+                <stop offset="100%" stop-color="${color2}"/>
+            </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#${gradientId})" rx="16"/>
+        <text x="50%" y="50%" dy=".35em" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="32" text-anchor="middle">${char}</text>
     </svg>`.trim();
 
     try {
@@ -89,10 +86,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({});
 
+  // 生成一组随机图标
   const updateGeneratedIcons = (text: string) => {
-      const styles: any[] = ['blue', 'purple', 'orange', 'green', 'dark'];
-      const icons = styles.map(s => generateSvgIcon(text, s));
-      setGeneratedIcons(icons);
+      const newIcons: string[] = [];
+      // 生成 6 个不同的随机样式
+      for (let i = 0; i < 6; i++) {
+          const c1 = getRandomColor();
+          // 第二个颜色在色相上偏移 30-60 度，形成邻近色渐变
+          const h2 = (parseInt(c1.split(',')[0].split('(')[1]) + 30 + Math.random() * 30) % 360;
+          const c2 = `hsl(${h2}, 70%, 50%)`;
+          newIcons.push(generateSvgIcon(text, c1, c2));
+      }
+      setGeneratedIcons(newIcons);
   };
 
   useEffect(() => {
@@ -128,7 +133,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSiteChange = (key: keyof SiteSettings, value: string) => {
     setLocalSiteSettings(prev => {
         const next = { ...prev, [key]: value };
-        // 移除这里自动调用 updateGeneratedIcons，改为用户手动或初始加载触发
         return next;
     });
   };
@@ -443,13 +447,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 </div>
                                 <div className="mt-3">
                                     <div className="flex items-center justify-between mb-2">
-                                        <p className="text-xs text-slate-500">或者选择一个生成的图标 (点击应用):</p>
+                                        <p className="text-xs text-slate-500">选择生成的随机图标 (点击右侧按钮刷新):</p>
                                         <button 
                                             type="button"
                                             onClick={() => updateGeneratedIcons(localSiteSettings.navTitle)}
                                             className="text-xs flex items-center gap-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors"
                                         >
-                                            <RefreshCw size={12} /> 手动生成
+                                            <RefreshCw size={12} /> 随机生成
                                         </button>
                                     </div>
                                     <div className="flex gap-2">
@@ -465,26 +469,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     </div>
                                 </div>
                             </div>
+                            
+                            {/* Card Style Setting Removed as requested */}
 
-                            <div className="pt-2">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">卡片样式</label>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => handleSiteChange('cardStyle', 'detailed')}
-                                        className={`flex-1 p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${localSiteSettings.cardStyle === 'detailed' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                                    >
-                                        <List size={24} />
-                                        <span className="text-xs font-medium">详情模式</span>
-                                    </button>
-                                    <button
-                                        onClick={() => handleSiteChange('cardStyle', 'simple')}
-                                        className={`flex-1 p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${localSiteSettings.cardStyle === 'simple' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                                    >
-                                        <LayoutTemplate size={24} />
-                                        <span className="text-xs font-medium">简约模式</span>
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 )}
