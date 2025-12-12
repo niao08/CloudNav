@@ -253,19 +253,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 300px; font-family: sans-serif; padding: 12px; }
-    h3 { margin: 0 0 10px 0; font-size: 16px; color: #333; }
-    button { width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    body { width: 300px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; background: #f8fafc; color: #1e293b; }
+    h3 { margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0f172a; }
+    button { width: 100%; padding: 10px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 14px; transition: background 0.2s; }
     button:hover { background: #2563eb; }
-    .status { margin-top: 10px; font-size: 12px; text-align: center; color: #666; min-height: 16px; }
-    .page-info { font-size: 12px; color: #64748b; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #f1f5f9; padding: 6px; border-radius: 4px; display: flex; align-items: center; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    
+    .status { margin-top: 12px; font-size: 13px; text-align: center; color: #64748b; min-height: 20px; font-weight: 500; }
+    
+    .page-info { font-size: 13px; color: #475569; margin-bottom: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #ffffff; padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    
+    select { width: 100%; padding: 8px 12px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font-size: 14px; outline: none; appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; }
+    select:focus { border-color: #3b82f6; ring: 2px solid #3b82f6; }
   </style>
 </head>
 <body>
   <h3>${localSiteSettings.navTitle || 'CloudNav'}</h3>
+  
   <div class="page-info" id="page-title">Loading...</div>
-  <button id="save-btn">保存到 ${localSiteSettings.navTitle || 'CloudNav'}</button>
+  
+  <select id="category-select">
+     <option value="">加载分类中...</option>
+  </select>
+  
+  <button id="save-btn" disabled>正在连接...</button>
+  
   <div id="status" class="status"></div>
+  
   <script src="popup.js"></script>
 </body>
 </html>`;
@@ -276,21 +290,96 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const statusEl = document.getElementById('status');
+  const saveBtn = document.getElementById('save-btn');
+  const catSelect = document.getElementById('category-select');
+  const titleEl = document.getElementById('page-title');
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    document.getElementById('page-title').textContent = tab.title;
     
-    // 显示图标预览
+    // 1. Render Page Info
+    titleEl.textContent = tab.title;
     if (tab.favIconUrl) {
        const img = document.createElement('img');
        img.src = tab.favIconUrl;
        img.style.cssText = 'width:16px;height:16px;margin-right:8px;vertical-align:middle;border-radius:2px;';
-       document.getElementById('page-title').prepend(img);
+       titleEl.prepend(img);
     }
 
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      const status = document.getElementById('status');
-      status.textContent = 'Saving...';
+    // 2. Fetch Categories & Check Duplicates
+    try {
+        const res = await fetch(\`\${CONFIG.apiBase}/api/storage\`, {
+            method: 'GET',
+            headers: { 'x-auth-password': CONFIG.password }
+        });
+        
+        if (!res.ok) throw new Error('Connect Error');
+        
+        const data = await res.json();
+        const categories = data.categories || [];
+        const links = data.links || [];
+
+        // Populate Dropdown
+        catSelect.innerHTML = '';
+        if (categories.length === 0) {
+             const opt = document.createElement('option');
+             opt.value = 'common';
+             opt.textContent = '默认分类';
+             catSelect.appendChild(opt);
+        } else {
+             categories.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.name;
+                catSelect.appendChild(opt);
+             });
+        }
+        
+        // Select 'common' by default if available
+        if (categories.some(c => c.id === 'common')) {
+            catSelect.value = 'common';
+        }
+
+        // Check for duplicates (Duplicate Detection)
+        const normalize = u => u ? u.toLowerCase().trim().replace(/\\/$/, '') : '';
+        const currentUrl = normalize(tab.url);
+        const existing = links.find(l => normalize(l.url) === currentUrl);
+
+        if (existing) {
+            const existCat = categories.find(c => c.id === existing.categoryId);
+            const catName = existCat ? existCat.name : '未知分类';
+            
+            // Show warning
+            statusEl.innerHTML = \`<span style="color:#d97706">⚠️ 链接已存在于 [ \${catName} ]</span>\`;
+            saveBtn.textContent = "更新链接 (再次保存)";
+            saveBtn.style.backgroundColor = "#eab308"; // Amber for update
+            
+            // Auto-select existing category
+            if (existing.categoryId) catSelect.value = existing.categoryId;
+        } else {
+            saveBtn.textContent = "保存到 CloudNav";
+        }
+
+        saveBtn.disabled = false;
+
+    } catch (e) {
+        console.error(e);
+        statusEl.textContent = "连接服务器失败，请检查密码或网络";
+        statusEl.style.color = '#ef4444';
+        
+        // Allow fallback save attempt even if load fails
+        catSelect.innerHTML = '<option value="">加载失败 (尝试默认)</option>';
+        saveBtn.textContent = "尝试保存";
+        saveBtn.disabled = false;
+    }
+
+    // 3. Save Handler
+    saveBtn.addEventListener('click', async () => {
+      const originalText = saveBtn.textContent;
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中...';
+      statusEl.textContent = '';
       
       try {
         const res = await fetch(\`\${CONFIG.apiBase}/api/link\`, {
@@ -302,27 +391,32 @@ document.addEventListener('DOMContentLoaded', async () => {
           body: JSON.stringify({
             title: tab.title,
             url: tab.url,
-            icon: tab.favIconUrl || '', // 获取网站图标
-            categoryId: '' // Auto-detect
+            icon: tab.favIconUrl || '',
+            categoryId: catSelect.value
           })
         });
 
         if (res.ok) {
           const data = await res.json();
-          status.textContent = '已保存！分类: ' + (data.categoryName || '默认');
-          status.style.color = '#16a34a';
-          setTimeout(() => window.close(), 1500);
+          statusEl.textContent = '✅ 已保存到: ' + (data.categoryName || '默认');
+          statusEl.style.color = '#16a34a';
+          saveBtn.textContent = '保存成功';
+          setTimeout(() => window.close(), 1200);
         } else {
-          status.textContent = 'Error: ' + res.status;
-          status.style.color = '#dc2626';
+          statusEl.textContent = 'Error: ' + res.status;
+          statusEl.style.color = '#dc2626';
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalText;
         }
       } catch (e) {
-        status.textContent = 'Network Error';
-        status.style.color = '#dc2626';
+        statusEl.textContent = 'Network Error';
+        statusEl.style.color = '#dc2626';
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
       }
     });
   } catch(e) {
-     document.getElementById('status').textContent = "Extension Error: " + e.message;
+     statusEl.textContent = "Extension Error: " + e.message;
   }
 });`;
 
